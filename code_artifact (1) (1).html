@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>업그레이드 가위바위보 (폭탄 추가)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background: linear-gradient(135deg, #FF9A9E 0%, #FECFEF 99%, #FECFEF 100%);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden; /* 폭죽 애니메이션을 위해 스크롤 숨김 */
+        }
+        .title-font {
+            font-family: 'Jua', sans-serif;
+        }
+        /* 팝 애니메이션 (버튼 클릭/결과 표시) */
+        @keyframes pop {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        /* 폭죽용 캔버스 */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+            display: none;
+        }
+        /* 게임 오버 모달 */
+        #game-over-modal {
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <!-- 폭죽 효과 캔버스 -->
+    <canvas id="confetti-canvas"></canvas>
+
+    <div class="w-full max-w-xl bg-white bg-opacity-80 backdrop-blur-md rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col gap-6 relative z-10">
+        
+        <!-- 헤더 & 라운드 표시 -->
+        <div class="text-center">
+            <h1 class="text-4xl title-font text-gray-800 mb-2">익스트림 가위바위보 💥</h1>
+            <div class="inline-block bg-pink-100 text-pink-600 px-4 py-1 rounded-full font-bold text-sm tracking-widest shadow-sm">
+                ROUND <span id="round-count">0</span> / 5
+            </div>
+        </div>
+
+        <!-- 규칙 설명 패널 -->
+        <div class="bg-blue-50 text-blue-800 text-xs md:text-sm rounded-xl p-3 text-center border border-blue-100">
+            <span class="font-bold">✨ 새로운 규칙 ✨</span><br>
+            💣(폭탄)은 ✊(바위)와 ✋(보)를 부수지만, ✌️(가위)에게 도화선이 잘려 패배합니다!
+        </div>
+
+        <!-- 점수판 -->
+        <div class="flex justify-between items-center bg-white rounded-2xl p-4 shadow-sm">
+            <div class="flex flex-col items-center w-1/3">
+                <span class="text-gray-500 font-bold mb-1">플레이어</span>
+                <span id="user-score" class="text-5xl title-font text-blue-500">0</span>
+            </div>
+            <div class="text-3xl font-black text-gray-300">VS</div>
+            <div class="flex flex-col items-center w-1/3">
+                <span class="text-gray-500 font-bold mb-1">컴퓨터</span>
+                <span id="com-score" class="text-5xl title-font text-red-500">0</span>
+            </div>
+        </div>
+
+        <!-- 배틀 아레나 (선택 결과 표시) -->
+        <div class="flex justify-center items-center space-x-4 md:space-x-8 h-32 md:h-40 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+            <div class="flex flex-col items-center">
+                <div id="user-display" class="text-7xl md:text-8xl transition-transform duration-200 drop-shadow-md">❔</div>
+            </div>
+            <div class="text-2xl font-bold text-gray-400">vs</div>
+            <div class="flex flex-col items-center">
+                <div id="com-display" class="text-7xl md:text-8xl transition-transform duration-200 drop-shadow-md">❔</div>
+            </div>
+        </div>
+
+        <!-- 라운드 결과 메시지 -->
+        <div class="text-center h-10">
+            <p id="round-result" class="text-xl md:text-2xl font-bold text-gray-700">원하는 패를 선택하세요!</p>
+        </div>
+
+        <!-- 컨트롤 버튼 -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="control-buttons">
+            <button onclick="playRound('scissors')" class="choice-btn group bg-white hover:bg-blue-50 transition-all duration-200 rounded-2xl p-4 shadow-md hover:shadow-lg transform active:scale-95 flex flex-col items-center justify-center border-2 border-transparent hover:border-blue-300">
+                <span class="text-5xl md:text-6xl group-hover:scale-110 transition-transform mb-2">✌️</span>
+                <span class="font-bold text-gray-600">가위</span>
+            </button>
+            <button onclick="playRound('rock')" class="choice-btn group bg-white hover:bg-red-50 transition-all duration-200 rounded-2xl p-4 shadow-md hover:shadow-lg transform active:scale-95 flex flex-col items-center justify-center border-2 border-transparent hover:border-red-300">
+                <span class="text-5xl md:text-6xl group-hover:scale-110 transition-transform mb-2">✊</span>
+                <span class="font-bold text-gray-600">바위</span>
+            </button>
+            <button onclick="playRound('paper')" class="choice-btn group bg-white hover:bg-green-50 transition-all duration-200 rounded-2xl p-4 shadow-md hover:shadow-lg transform active:scale-95 flex flex-col items-center justify-center border-2 border-transparent hover:border-green-300">
+                <span class="text-5xl md:text-6xl group-hover:scale-110 transition-transform mb-2">✋</span>
+                <span class="font-bold text-gray-600">보</span>
+            </button>
+            <button onclick="playRound('bomb')" class="choice-btn group bg-white hover:bg-gray-100 transition-all duration-200 rounded-2xl p-4 shadow-md hover:shadow-lg transform active:scale-95 flex flex-col items-center justify-center border-2 border-transparent hover:border-gray-800">
+                <span class="text-5xl md:text-6xl group-hover:scale-110 transition-transform mb-2">💣</span>
+                <span class="font-bold text-gray-800">폭탄</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 게임 오버 모달 -->
+    <div id="game-over-modal" class="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-40 hidden opacity-0 transition-opacity duration-500">
+        <div class="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl transform scale-90 transition-transform duration-500" id="modal-content">
+            <h2 class="text-4xl title-font mb-4" id="final-title">게임 종료!</h2>
+            <div class="text-6xl mb-4" id="final-emoji">🏆</div>
+            <p class="text-lg text-gray-600 mb-6" id="final-message">최종 결과를 확인하세요.</p>
+            
+            <div class="flex justify-center gap-6 mb-8 text-2xl title-font">
+                <div class="text-blue-500">나: <span id="final-user-score">0</span></div>
+                <div class="text-red-500">컴: <span id="final-com-score">0</span></div>
+            </div>
+
+            <button onclick="resetGame()" class="w-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg transform active:scale-95 transition-all text-lg">
+                다시 플레이하기 🔄
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 이모지 및 선택지 데이터
+        const choices = ['scissors', 'rock', 'paper', 'bomb'];
+        const emojis = {
+            'scissors': '✌️',
+            'rock': '✊',
+            'paper': '✋',
+            'bomb': '💣'
+        };
+
+        // 승리 규칙 (Key가 Value 배열에 있는 것들을 이김)
+        const winRules = {
+            'scissors': ['paper', 'bomb'], // 가위는 보와 폭탄(도화선 자르기)을 이김
+            'rock': ['scissors'],          // 바위는 가위를 이김
+            'paper': ['rock'],             // 보는 바위를 이김
+            'bomb': ['rock', 'paper']      // 폭탄은 바위와 보를 부숨
+        };
+
+        // 게임 상태 변수
+        let currentRound = 0;
+        const MAX_ROUNDS = 5;
+        let userScore = 0;
+        let comScore = 0;
+
+        // UI 요소
+        const roundCountEl = document.getElementById('round-count');
+        const userScoreEl = document.getElementById('user-score');
+        const comScoreEl = document.getElementById('com-score');
+        const userDisplay = document.getElementById('user-display');
+        const comDisplay = document.getElementById('com-display');
+        const roundResultEl = document.getElementById('round-result');
+        const choiceButtons = document.querySelectorAll('.choice-btn');
+        
+        // 모달 요소
+        const modal = document.getElementById('game-over-modal');
+        const modalContent = document.getElementById('modal-content');
+        const finalTitle = document.getElementById('final-title');
+        const finalEmoji = document.getElementById('final-emoji');
+        const finalMessage = document.getElementById('final-message');
+        const finalUserScore = document.getElementById('final-user-score');
+        const finalComScore = document.getElementById('final-com-score');
+
+        // 요소에 팝 애니메이션 재적용
+        function triggerAnimation(element) {
+            element.classList.remove('animate-pop');
+            void element.offsetWidth; // 리플로우 강제
+            element.classList.add('animate-pop');
+        }
+
+        // 게임 라운드 실행
+        function playRound(userChoice) {
+            if (currentRound >= MAX_ROUNDS) return;
+
+            currentRound++;
+            roundCountEl.innerText = currentRound;
+
+            // 컴퓨터의 무작위 선택
+            const comChoice = choices[Math.floor(Math.random() * choices.length)];
+
+            // 화면 표시 업데이트
+            userDisplay.innerText = emojis[userChoice];
+            comDisplay.innerText = emojis[comChoice];
+            triggerAnimation(userDisplay);
+            triggerAnimation(comDisplay);
+
+            // 승패 판정
+            if (userChoice === comChoice) {
+                roundResultEl.innerText = '무승부입니다! 땀 흘리는 접전 💦';
+                roundResultEl.className = 'text-xl md:text-2xl font-bold text-yellow-600 animate-pop';
+            } else if (winRules[userChoice].includes(comChoice)) {
+                userScore++;
+                userScoreEl.innerText = userScore;
+                roundResultEl.innerText = '나의 승리! 나이스 샷 🎯';
+                roundResultEl.className = 'text-xl md:text-2xl font-bold text-blue-600 animate-pop';
+                triggerAnimation(userScoreEl);
+            } else {
+                comScore++;
+                comScoreEl.innerText = comScore;
+                roundResultEl.innerText = '컴퓨터의 승리! 아쉽네요 😢';
+                roundResultEl.className = 'text-xl md:text-2xl font-bold text-red-600 animate-pop';
+                triggerAnimation(comScoreEl);
+            }
+
+            // 라운드 종료 체크
+            if (currentRound === MAX_ROUNDS) {
+                // 버튼 비활성화 (시각적)
+                choiceButtons.forEach(btn => {
+                    btn.classList.add('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+                });
+                
+                // 1초 뒤에 최종 결과창 띄우기
+                setTimeout(showGameOver, 1000);
+            }
+        }
+
+        // 게임 오버 처리 및 모달 표시
+        function showGameOver() {
+            finalUserScore.innerText = userScore;
+            finalComScore.innerText = comScore;
+
+            if (userScore > comScore) {
+                finalTitle.innerText = "최종 승리!";
+                finalTitle.className = "text-5xl title-font mb-4 text-blue-600";
+                finalEmoji.innerText = "🎉🏆🎉";
+                finalMessage.innerText = "축하합니다! 당신이 승리했습니다!";
+                startConfetti(); // 축하 폭죽 실행
+            } else if (comScore > userScore) {
+                finalTitle.innerText = "최종 패배...";
+                finalTitle.className = "text-5xl title-font mb-4 text-red-600";
+                finalEmoji.innerText = "💀";
+                finalMessage.innerText = "아쉽지만 컴퓨터가 승리했습니다.";
+            } else {
+                finalTitle.innerText = "무승부";
+                finalTitle.className = "text-5xl title-font mb-4 text-yellow-600";
+                finalEmoji.innerText = "🤝";
+                finalMessage.innerText = "치열한 승부 끝에 비겼습니다!";
+            }
+
+            modal.classList.remove('hidden');
+            // 부드러운 등장을 위한 slight delay
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modalContent.classList.remove('scale-90');
+                modalContent.classList.add('scale-100');
+            }, 10);
+        }
+
+        // 게임 초기화
+        function resetGame() {
+            currentRound = 0;
+            userScore = 0;
+            comScore = 0;
+            
+            roundCountEl.innerText = '0';
+            userScoreEl.innerText = '0';
+            comScoreEl.innerText = '0';
+            userDisplay.innerText = '❔';
+            comDisplay.innerText = '❔';
+            roundResultEl.innerText = '원하는 패를 선택하세요!';
+            roundResultEl.className = 'text-xl md:text-2xl font-bold text-gray-700';
+
+            // 버튼 활성화
+            choiceButtons.forEach(btn => {
+                btn.classList.remove('opacity-50', 'cursor-not-allowed', 'pointer-events-none');
+            });
+
+            // 모달 숨기기
+            modal.classList.add('opacity-0');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-90');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 500);
+
+            stopConfetti(); // 폭죽 끄기
+        }
+
+        // --- 폭죽(Confetti) 애니메이션 구현 ---
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        let animationId;
+
+        function startConfetti() {
+            canvas.style.display = 'block';
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            particles = [];
+            
+            // 파티클 생성
+            for (let i = 0; i < 150; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height - canvas.height,
+                    size: Math.random() * 10 + 5,
+                    color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+                    speedY: Math.random() * 3 + 2,
+                    speedX: (Math.random() - 0.5) * 2,
+                    rotation: Math.random() * 360,
+                    rotationSpeed: (Math.random() - 0.5) * 10
+                });
+            }
+            animateConfetti();
+        }
+
+        function animateConfetti() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let active = false;
+
+            particles.forEach(p => {
+                if (p.y < canvas.height) active = true;
+                
+                p.y += p.speedY;
+                p.x += p.speedX;
+                p.rotation += p.rotationSpeed;
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rotation * Math.PI / 180);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                ctx.restore();
+            });
+
+            if (active) {
+                animationId = requestAnimationFrame(animateConfetti);
+            }
+        }
+
+        function stopConfetti() {
+            cancelAnimationFrame(animationId);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            canvas.style.display = 'none';
+        }
+
+        // 창 크기 조절시 캔버스 크기 업데이트
+        window.addEventListener('resize', () => {
+            if(canvas.style.display === 'block') {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+        });
+    </script>
+</body>
+</html>
